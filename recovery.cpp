@@ -39,6 +39,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android/hardware/boot/1.0/IBootControl.h>
 #include <cutils/properties.h> /* for property_list */
 #include <fs_mgr/roots.h>
 #include <volume_manager/VolumeManager.h>
@@ -65,6 +66,11 @@
 
 using android::volmgr::VolumeManager;
 using android::volmgr::VolumeInfo;
+
+using android::sp;
+using android::hardware::boot::V1_0::IBootControl;
+using android::hardware::boot::V1_0::CommandResult;
+using android::hardware::boot::V1_0::Slot;
 
 static constexpr const char* COMMAND_FILE = "/cache/recovery/command";
 static constexpr const char* LAST_KMSG_FILE = "/cache/recovery/last_kmsg";
@@ -160,6 +166,36 @@ static void FinishRecovery(RecoveryUI* ui) {
   }
 
   sync();  // For good measure.
+}
+
+std::string get_chosen_slot(Device* device) {
+  std::vector<std::string> headers{ "Choose which slot to boot into on next boot." };
+  std::vector<std::string> items{ "A", "B" };
+  size_t chosen_item = device->GetUI()->ShowMenu(
+      headers, items, 0, true,
+      std::bind(&Device::HandleMenuKey, device, std::placeholders::_1, std::placeholders::_2));
+  if (chosen_item < 0)
+    return "";
+  return items[chosen_item];
+}
+
+int set_slot(Device* device) {
+  std::string slot = get_chosen_slot(device);
+  CommandResult ret;
+  auto cb = [&ret](CommandResult result) { ret = result; };
+  Slot sslot = (slot == "A") ? 0 : 1;
+  sp<IBootControl> module = IBootControl::getService();
+  if (!module) {
+    device->GetUI()->Print("Error getting bootctrl module.\n");
+  } else {
+    auto result = module->setActiveBootSlot(sslot, cb);
+    if (result.isOk() && ret.success) {
+      device->GetUI()->Print("Switched slot to %s.\n", slot.c_str());
+    } else {
+      device->GetUI()->Print("Error changing bootloader boot slot to %s", slot.c_str());
+    }
+  }
+  return ret.success ? 0 : 1;
 }
 
 static bool yes_no(Device* device, const char* question1, const char* question2) {
@@ -613,6 +649,10 @@ change_menu:
         device->RemoveMenuItemForAction(Device::ENABLE_ADB);
         device->GoHome();
         ui->Print("Enabled ADB.\n");
+        break;
+
+      case Device::SWAP_SLOT:
+        set_slot(device);
         break;
 
       case Device::RUN_GRAPHICS_TEST:
