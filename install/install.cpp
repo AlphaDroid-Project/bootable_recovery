@@ -170,7 +170,7 @@ static bool CheckAbSpecificMetadata(const std::map<std::string, std::string>& me
   if (!pkg_pre_build_fingerprint.empty() &&
       !isInStringList(device_fingerprint, pkg_pre_build_fingerprint, FINGERPRING_SEPARATOR)) {
     LOG(ERROR) << "Package is for source build " << pkg_pre_build_fingerprint << " but expected "
-               << device_fingerprint;
+              << device_fingerprint;
     return false;
   }
 
@@ -191,23 +191,8 @@ static bool CheckAbSpecificMetadata(const std::map<std::string, std::string>& me
                  << build_timestamp << " but package has timestamp " << pkg_post_timestamp
                  << " and downgrade not allowed.";
       undeclared_downgrade = true;
-    } else if (pkg_pre_build_fingerprint.empty()) {
-      LOG(ERROR) << "Downgrade package must have a pre-build version set, not allowed.";
-      undeclared_downgrade = true;
     }
   }
-  const auto post_build = get_value(metadata, "post-build");
-  const auto build_fingerprint = android::base::Tokenize(post_build, "/");
-  if (!build_fingerprint.empty() && android::base::GetProperty("ro.build.type", "") == "user") {
-    const auto& post_build_tag = build_fingerprint.back();
-    const auto build_tag = android::base::GetProperty("ro.build.tags", "");
-    if (build_tag != post_build_tag) {
-      LOG(ERROR) << "Post build-tag " << post_build_tag << " does not match device build tag "
-                 << build_tag;
-      return false;
-    }
-  }
-
   if (undeclared_downgrade &&
       !(ui->IsTextVisible() && ask_to_continue_downgrade(ui->GetDevice()))) {
     return false;
@@ -424,11 +409,11 @@ static InstallResult TryUpdateBinary(Package* package, bool* wipe_cache,
   bool device_only_supports_ab = device_supports_ab && !ab_device_supports_nonab;
   bool device_supports_virtual_ab = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
 
-  const auto current_spl = android::base::GetProperty("ro.build.version.security_patch", "");
+  /*const auto current_spl = android::base::GetProperty("ro.build.version.security_patch", "");
   if (ViolatesSPLDowngrade(zip, current_spl)) {
     LOG(ERROR) << "Denying OTA because it's SPL downgrade";
     return INSTALL_ERROR;
-  }
+  }*/
 
   const auto reboot_to_recovery = [] {
     if (std::string err; !clear_bootloader_message(&err)) {
@@ -649,13 +634,14 @@ static InstallResult VerifyAndInstallPackage(Package* package, bool* wipe_cache,
   ui->SetProgressType(RecoveryUI::DETERMINATE);
   ui->ShowProgress(VERIFICATION_PROGRESS_FRACTION, VERIFICATION_PROGRESS_TIME);
 
-  // Verify package.
+  /*
   if (!verify_package(package, ui)) {
     log_buffer->push_back(android::base::StringPrintf("error: %d", kZipVerificationFailure));
     if (!ui->IsTextVisible() || !ask_to_continue_unverified(ui->GetDevice())) {
         return INSTALL_CORRUPT;
     }
   }
+   */
 
   // Verify and install the contents of the package.
   ui->Print("Installing update...\n");
